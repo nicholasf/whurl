@@ -8,7 +8,7 @@ sophistry is a TypeScript npm library that provides a centralised GraphQL test d
 
 Frontend and backend teams often need to work independently — the frontend outpaces the backend, or the backend is unavailable for local development. In a React+GraphQL test suite, each test typically assembles its own collection of mocks — `vi.fn()`, `vi.mock()`, module interception — to simulate the backend. This is a burden of its own. Each test builds a private world of fakes that drifts from reality over time, creates conceptual overhead for the reader, and gives false confidence.
 
-sophistry addresses this by providing a single maintained layer that represents your GraphQL API via its schema, validated against it, and verifiable from both sides.
+sophistry addresses this by providing a single maintained layer that represents your GraphQL API via its schema, validated against it, and verifiable from both sides. At any point it can be run transparently — stepping aside entirely so requests flow through to the real backend — making it a coordination tool as much as a testing tool.
 
 ## How It Works
 
