@@ -42,7 +42,9 @@ query Me {
 }
 ```
 
-The operation name is the key passed to `sophistry.specify()`. This is already considered best practice in GraphQL — named operations appear in server logs, work with developer tooling, and make intent explicit. sophistry enforces it as a hard requirement.
+Operation names are a client-side convention — they are chosen by the developer writing the query and have no presence in the GraphQL schema itself. The schema defines what fields are available; the operation name is simply a label the client puts on a particular query or mutation.
+
+Naming operations is considered best practice in GraphQL regardless of sophistry. Named operations appear in server logs, are displayed by developer tools and GraphQL clients like urql devtools, and make the intent of each query explicit. sophistry enforces this as a hard requirement and uses the operation name as the key passed to `sophistry.specify()`.
 
 If an unnamed operation is intercepted, sophistry throws immediately with a clear message indicating which query needs a name.
 
