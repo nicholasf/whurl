@@ -26,6 +26,26 @@ The primary mode. Tests declare what a GraphQL operation should return. sophistr
 
 Individual tests can specify exactly which schema-validated responses they need to exercise particular conditions — error states, empty results, edge cases.
 
+#### Named operations required
+
+sophistry matches specifications to intercepted requests by operation name. Every query and mutation in your codebase must be named:
+
+```graphql
+# ✓ named — sophistry can match this
+query Me {
+  me { id name username }
+}
+
+# ✗ unnamed — sophistry will throw at intercept time
+{
+  me { id name username }
+}
+```
+
+The operation name is the key passed to `sophistry.specify()`. This is already considered best practice in GraphQL — named operations appear in server logs, work with developer tooling, and make intent explicit. sophistry enforces it as a hard requirement.
+
+If an unnamed operation is intercepted, sophistry throws immediately with a clear message indicating which query needs a name.
+
 ```ts
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
