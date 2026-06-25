@@ -12,7 +12,11 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "msw": "^2.14.6",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "graphql": "^17.0.1"
   }
 }
