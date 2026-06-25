@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { register, registerWithSchema, reset, specify, _getEndpoint } from '../src/index.js'
 import { schema } from './schema.js'
 
@@ -170,12 +170,95 @@ describe('GraphQL specifications', () => {
   })
 })
 
+describe('verbose logging', () => {
+  beforeEach(() => {
+    registerWithSchema(graphqlURL, schema)
+    process.env['WHURL_VERBOSE'] = 'true'
+  })
+
+  afterEach(() => {
+    delete process.env['WHURL_VERBOSE']
+    vi.restoreAllMocks()
+  })
+
+  it('logs the Hurl-formatted request to stdout when a GraphQL spec is matched', async () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
+
+    await fetch(graphqlURL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+    })
+
+    expect(spy).toHaveBeenCalledWith(
+      `POST ${graphqlURL}\nContent-Type: application/json\n\n${JSON.stringify({ query: 'query Me { me { id name email } }' }, null, 2)}`
+    )
+  })
+
+  it('logs the Hurl-formatted request to stdout when a REST spec is matched', async () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    register(restURL)
+    specify('GetAccount', 'GET', { id: '1', name: 'Darth Vader' })
+
+    await fetch(restURL, { method: 'GET' })
+
+    expect(spy).toHaveBeenCalledWith(`GET ${restURL}`)
+  })
+})
+
 describe('non-GraphQL specifications', () => {
-  it.todo('stores a REST specification on the endpoint')
-  it.todo('throws when no endpoint is registered')
+  beforeEach(() => {
+    register(restURL)
+  })
+
+  it('stores a REST specification on the endpoint', () => {
+    specify('GetAccount', 'GET', { id: '1', name: 'Darth Vader' })
+
+    const endpoint = _getEndpoint(restURL)
+    expect(endpoint.specifications.has('GET')).toBe(true)
+    expect(endpoint.specifications.get('GET')?.operationName).toBe('GetAccount')
+  })
+
+  it('throws when no plain endpoint is registered', () => {
+    reset()
+    expect(() => specify('GetAccount', 'GET', { id: '1' })).toThrow('No plain endpoint registered.')
+  })
+
+  it('returns specified data for a GET request', async () => {
+    specify('GetAccount', 'GET', { id: '1', name: 'Darth Vader' })
+
+    const response = await fetch(restURL, { method: 'GET' })
+    const data = await response.json()
+
+    expect(data).toEqual({ data: { id: '1', name: 'Darth Vader' } })
+  })
 })
 
 describe('multiple registrations', () => {
-  it.todo('multiple endpoints can coexist')
-  it.todo('specify resolves to the correct endpoint')
+  const accountsURL = 'http://localhost:3000/api/accounts'
+  const postsURL = 'http://localhost:3000/api/posts'
+
+  it('multiple endpoints can coexist', () => {
+    register(accountsURL)
+    register(postsURL)
+    registerWithSchema(graphqlURL, schema)
+
+    expect(_getEndpoint(accountsURL)).toBeDefined()
+    expect(_getEndpoint(postsURL)).toBeDefined()
+    expect(_getEndpoint(graphqlURL)).toBeDefined()
+  })
+
+  it('specify resolves to the correct endpoint when a URL is provided', () => {
+    register(accountsURL)
+    register(postsURL)
+
+    specify('GetAccount', accountsURL, 'GET', { id: '1' })
+    specify('GetPost', postsURL, 'GET', { id: '2' })
+
+    expect(_getEndpoint(accountsURL).specifications.get('GET')?.operationName).toBe('GetAccount')
+    expect(_getEndpoint(postsURL).specifications.get('GET')?.operationName).toBe('GetPost')
+  })
 })

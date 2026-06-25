@@ -44,6 +44,7 @@ export type SpecificationHandle = {
 /** A single specification stored on an endpoint. Matched up to remaining times before exhaustion. */
 export type Specification = {
   operationName?: string
+  method?: string
   query?: string
   data: SpecifyData
   remaining: number
@@ -52,8 +53,9 @@ export type Specification = {
 /** The response data shape returned by a specification. */
 export type SpecifyData = Record<string, unknown>
 
-/** Declares a specification on a registered endpoint. Accepts two or three arguments. */
+/** Declares a specification on a registered endpoint. Accepts two, three, or four arguments. */
 export type SpecifyFn = {
   (operationName: string, data: SpecifyData): SpecificationHandle
-  (operationName: string, verbOrUrl: string, data: SpecifyData): SpecificationHandle
+  (operationName: string, method: string, data: SpecifyData): SpecificationHandle
+  (operationName: string, url: EndpointURL, method: string, data: SpecifyData): SpecificationHandle
 }

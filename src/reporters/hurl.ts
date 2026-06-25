@@ -4,6 +4,18 @@ import type { Reporter, ReportContext } from '../types.js'
 
 const outputDirectory = 'whurl'
 
+export const formatHurlRequest = (context: ReportContext): string => {
+  if (context.query) {
+    return [
+      `${context.method} ${context.url}`,
+      'Content-Type: application/json',
+      '',
+      JSON.stringify({ query: context.query }, null, 2),
+    ].join('\n')
+  }
+  return `${context.method} ${context.url}`
+}
+
 export const createHurlReporter = (): Reporter => ({
   report: async (context: ReportContext): Promise<void> => {
     await mkdir(outputDirectory, { recursive: true })
@@ -11,13 +23,6 @@ export const createHurlReporter = (): Reporter => ({
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -1)
     const filename = `${timestamp}-${context.operationName}.hurl`
 
-    const content = [
-      `${context.method} ${context.url}`,
-      'Content-Type: application/json',
-      '',
-      JSON.stringify({ query: context.query }, null, 2),
-    ].join('\n')
-
-    await writeFile(join(outputDirectory, filename), content, 'utf-8')
+    await writeFile(join(outputDirectory, filename), formatHurlRequest(context), 'utf-8')
   },
 })
