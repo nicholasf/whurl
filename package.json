@@ -1,5 +1,5 @@
 {
-  "name": "sophistry",
+  "name": "whurl",
   "version": "0.1.0",
   "type": "module",
   "description": "GraphQL test double and contract layer",

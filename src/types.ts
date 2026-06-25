@@ -17,6 +17,19 @@ export interface Interceptor {
   reset(): void
 }
 
+/** Context passed to a Reporter when a specification is consumed. */
+export type ReportContext = {
+  operationName: string
+  url: EndpointURL
+  method: string
+  query: string
+}
+
+/** Abstracts the output format for consumed specifications. */
+export interface Reporter {
+  report(context: ReportContext): Promise<void>
+}
+
 /** Registers a plain HTTP endpoint with no schema validation. */
 export type RegisterFn = (url: EndpointURL) => void
 
