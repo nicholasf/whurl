@@ -1,8 +1,10 @@
 # whurl
 
+**whurl** mocks and validates your GraphQL calls using a service worker, and can also export them as Hurl assertions — verifying your queries, data shapes, and schema against the real backend. If you've wanted the GraphQL schema to act as a contract between frontend and backend — the way a Swagger file does for REST — whurl is built for that.
+
 **whurl** combines two libraries: [msw](https://mswjs.io/) (Mock Service Worker) for HTTP interception in tests, and [Hurl](https://hurl.dev/) for contract verification against real backends. The name comes from **W**orker and **H**url.
 
-No `vi.mock()` calls. Your GraphQL client runs for real — whurl intercepts at the network layer. You can also mock non GraphQL endpoints (such as OAuth providers).
+Your GraphQL client runs for real — whurl intercepts at the network layer. You can also mock non-GraphQL endpoints (such as OAuth providers).
 
 The FE _registers_ an endpoint with a GraphQL schema then _specifies_ operations along with the data they will return. These queries are validated against the schema at runtime. When the test results in a call to the backend, the specified data is returned. All of this thanks to [msw](https://mswjs.io/).
 
