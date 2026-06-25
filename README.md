@@ -1,6 +1,6 @@
 # sophistry
 
-> **Note:** The name of this library is provisional and will change. The current name reflects the problem it solves rather than what it does.
+> **Note:** The name of this library is provisional and will change.
 
 sophistry is a TypeScript npm library that provides a centralised GraphQL test double and contract layer, sitting between your frontend tests and your GraphQL backend.
 
@@ -135,6 +135,23 @@ sophistry intercepts at the HTTP layer via [msw](https://mswjs.io/), abstracted 
 - Your GraphQL client, auth exchange, and component tree run for real — no `vi.mock('urql')` needed
 - sophistry works alongside Vitest, Jest, or any other test runner
 - Migration from existing mock-heavy tests is incremental: add sophistry's setup, then convert `vi.mock` calls to sophistry handlers one at a time
+
+## REST Support
+
+sophistry works with REST endpoints as well as GraphQL. The same specified and transparent modes apply, and Hurl export works the same way.
+
+The difference: REST specifications are matched by HTTP method and URL pattern rather than GraphQL operation name, and there is no schema validation. Shape and structure must be asserted manually or via TypeScript types rather than derived from a schema.
+
+```ts
+sophistry.specify('GET /api/accounts/:id', {
+  id: 1,
+  name: 'Nicholas',
+})
+```
+
+Hurl export and the `Reporter` interface work identically. Value and shape assertions in the exported Hurl files follow the same rules — backend teams supply a `vars.env` for path parameters like `:id`.
+
+REST mode is useful for teams that are in the process of migrating from REST to GraphQL, or where some parts of the API remain REST-only.
 
 ## Status
 
