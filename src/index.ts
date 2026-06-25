@@ -1,9 +1,14 @@
-// sophistry — GraphQL test double and contract layer
+// whurl — GraphQL test double and contract layer
 import { buildSchema, getNamedType, isObjectType, type GraphQLSchema } from 'graphql'
 import { createMSWInterceptor } from './interceptors/msw.js'
-import type { Endpoint, EndpointURL, RegisterFn, RegisterWithSchemaFn, SpecifyFn, SpecifyData } from './types.js'
+import { createHurlReporter } from './reporters/hurl.js'
+import type { Endpoint, EndpointURL, RegisterFn, RegisterWithSchemaFn, Reporter, SpecifyFn, SpecifyData } from './types.js'
 
 const registry = new Map<EndpointURL, Endpoint>()
+
+const reporter: Reporter | null = process.env['WHURL'] === 'true'
+  ? createHurlReporter()
+  : null
 
 const resolveRequest = async (request: Request): Promise<SpecifyData | null> => {
   const endpoint = registry.get(request.url)
@@ -27,6 +32,16 @@ const resolveRequest = async (request: Request): Promise<SpecifyData | null> => 
     if (!specification || specification.consumed) return null
 
     specification.consumed = true
+
+    if (reporter) {
+      await reporter.report({
+        operationName,
+        url: endpoint.url,
+        method: request.method,
+        query,
+      })
+    }
+
     return specification.data
   }
 
