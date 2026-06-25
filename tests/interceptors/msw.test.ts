@@ -12,7 +12,7 @@ describe('createMSWInterceptor', () => {
   })
 
   describe('request interception', () => {
-    const data: SpecifyData = { me: { id: '1', name: 'Nicholas', email: 'nicholas@example.com' } }
+    const data: SpecifyData = { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }
     const interceptor = createMSWInterceptor(async () => data)
 
     beforeAll(() => interceptor.start())

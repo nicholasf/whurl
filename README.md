@@ -4,11 +4,9 @@
 
 No `vi.mock()` calls. Your GraphQL client runs for real — whurl intercepts at the network layer. You can also mock non GraphQL endpoints (such as OAuth providers).
 
-This tool will also let frontend and backend teams coordinate around a graphql schema. It helps solve the problem of the GraphQL schema being the contract, rather than the FE and BE having to synchronize around live functionality to guarantee things work.
+The FE _registers_ an endpoint with a GraphQL schema then _specifies_ operations along with the data they will return. These queries are validated against the schema at runtime. When the test results in a call to the backend, the specified data is returned. All of this thanks to [msw](https://mswjs.io/).
 
-The FE _registers_ an endpoint with a GrapQL schema then _specifies_ operations along with the data they will return. These queries are validated against the schema at runtime. When the test results in a call to the backend, the specified data is returned. All of this thanks to [msw](https://mswjs.io/).
-
-Later, if you want, you can convert all of these queries to the [Hurl](https://hurl.dev/) format and run them against your backend (with variable substitution). 
+Later, if you want, you can convert all of these queries to the [Hurl](https://hurl.dev/) format and run them against your backend (with variable substitution).
 
 ```ts
 import { render, screen } from '@testing-library/react'
@@ -24,7 +22,7 @@ beforeEach(() => {
 
 describe('DashboardPage', () => {
   it('renders the authenticated user', async () => {
-    specify('Me', {
+    specify('Me', {  // intercepts the 'Me' query DashboardPage fires on mount
       me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' }
     })
 
@@ -131,7 +129,14 @@ query Me {
 }
 ```
 
-A specification is consumed once and then exhausted. The test that calls `specify` owns that specification for the duration of that test. Call `reset()` between tests to clear consumed state — the setup file handles this if you call it in `beforeEach`.
+By default a specification is matched once and then exhausted. Chain `.repeat(n)` to allow it to be matched more times:
+
+```ts
+specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })          // matched once
+specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }).repeat(3) // matched three times
+```
+
+Call `reset()` between tests to clear all specifications and registered endpoints:
 
 ```ts
 import { beforeEach } from 'vitest'
@@ -139,6 +144,26 @@ import { reset } from 'whurl'
 
 beforeEach(() => reset())
 ```
+
+## Plain HTTP endpoints
+
+whurl can intercept any HTTP endpoint, not just GraphQL. This is useful for mocking OAuth providers, REST APIs, or any other HTTP dependency your components talk to during tests.
+
+Register a plain endpoint with `register()`, then declare specifications using the three-argument form — operation name, HTTP method, and response data:
+
+```ts
+import { register, specify } from 'whurl'
+
+register('http://auth.example.com/oauth/token')
+
+specify('ExchangeToken', 'POST', {
+  access_token: 'sith-token-abc123',
+  token_type: 'Bearer',
+  expires_in: 3600,
+})
+```
+
+whurl is just MSW here — `register` + `specify` is a thin DSL over an MSW handler. The intercept, the response envelope, the lifecycle — all MSW. whurl adds the operation name as a label and the `.repeat(n)` lifetime on top.
 
 ## Hurl export
 
@@ -181,10 +206,32 @@ interface Interceptor {
 
 This means whurl is not tied to MSW specifically — any library that can intercept HTTP requests and return a response can be wired in by implementing this interface.
 
-## TODO
+## Verbose mode
 
-- **Specification lifetime** — a specification is currently consumed exactly once. We need to decide and implement a repeat count: how many times a specification can be matched before it is exhausted. Options include once (current behaviour), a fixed count, or unlimited.
-- **REST specifications** — three-argument form `specify(operationName, method, data)` for non-GraphQL endpoints.
+Set `WHURL_VERBOSE=true` to log each matched specification as a Hurl request to stdout as tests run:
+
+```bash
+WHURL_VERBOSE=true vitest run
+```
+
+Output for a GraphQL spec:
+
+```
+POST http://localhost:3000/graphql
+Content-Type: application/json
+
+{
+  "query": "query Me { me { id name email } }"
+}
+```
+
+Output for a plain HTTP spec:
+
+```
+GET http://localhost:3000/api/accounts
+```
+
+Verbose mode and `WHURL=true` file export are independent — both can be active at once.
 
 ## Status
 

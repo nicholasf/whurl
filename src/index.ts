@@ -1,8 +1,8 @@
 // whurl — GraphQL test double and contract layer
 import { buildSchema, getNamedType, isObjectType, type GraphQLSchema } from 'graphql'
 import { createMSWInterceptor } from './interceptors/msw.js'
-import { createHurlReporter } from './reporters/hurl.js'
-import type { Endpoint, EndpointURL, RegisterFn, RegisterWithSchemaFn, Reporter, SpecifyFn, SpecifyData } from './types.js'
+import { createHurlReporter, formatHurlRequest } from './reporters/hurl.js'
+import type { Endpoint, EndpointURL, RegisterFn, RegisterWithSchemaFn, Reporter, SpecificationHandle, SpecifyFn, SpecifyData } from './types.js'
 
 const registry = new Map<EndpointURL, Endpoint>()
 
@@ -29,23 +29,40 @@ const resolveRequest = async (request: Request): Promise<SpecifyData | null> => 
     if (!operationName) return null
 
     const specification = endpoint.specifications.get(operationName)
-    if (!specification || specification.consumed) return null
+    if (!specification || specification.remaining <= 0) return null
 
-    specification.consumed = true
+    specification.remaining -= 1
+
+    const graphqlContext = { operationName, url: endpoint.url, method: request.method, query }
 
     if (reporter) {
-      await reporter.report({
-        operationName,
-        url: endpoint.url,
-        method: request.method,
-        query,
-      })
+      await reporter.report(graphqlContext)
+    }
+
+    if (process.env['WHURL_VERBOSE'] === 'true') {
+      console.log(formatHurlRequest(graphqlContext))
     }
 
     return specification.data
   }
 
-  return null
+  const method = request.method.toUpperCase()
+  const specification = endpoint.specifications.get(method)
+  if (!specification || specification.remaining <= 0) return null
+
+  specification.remaining -= 1
+
+  const restContext = { operationName: specification.operationName ?? method, url: endpoint.url, method, query: '' }
+
+  if (reporter) {
+    await reporter.report(restContext)
+  }
+
+  if (process.env['WHURL_VERBOSE'] === 'true') {
+    console.log(formatHurlRequest(restContext))
+  }
+
+  return specification.data
 }
 
 const interceptor = createMSWInterceptor(resolveRequest)
@@ -71,6 +88,17 @@ const validateURL = (url: string): void => {
   } catch {
     throw new Error(`Invalid URL: ${url}`)
   }
+}
+
+const findRestEndpoint = (): Endpoint => {
+  const restEndpoints = [...registry.values()].filter(e => e.schema === undefined)
+  if (restEndpoints.length === 0) {
+    throw new Error('No plain endpoint registered. Call register first.')
+  }
+  if (restEndpoints.length > 1) {
+    throw new Error('Multiple plain endpoints registered. Specify a URL as the second argument.')
+  }
+  return restEndpoints[0]!
 }
 
 const findGraphQLEndpoint = (): Endpoint => {
@@ -131,23 +159,39 @@ export const registerWithSchema: RegisterWithSchemaFn = (url: EndpointURL, schem
 
 export const specify: SpecifyFn = (
   operationName: string,
-  dataOrVerbOrUrl: SpecifyData | string,
+  dataOrMethodOrUrl: SpecifyData | string,
+  methodOrData?: SpecifyData | string,
   _data?: SpecifyData
-): void => {
-  if (typeof dataOrVerbOrUrl === 'string') {
-    // three-argument form: operationName, verbOrUrl, data — to be implemented
-  } else {
-    const specData = dataOrVerbOrUrl
+): SpecificationHandle => {
+  if (typeof dataOrMethodOrUrl !== 'string') {
+    const specData = dataOrMethodOrUrl
     const endpoint = findGraphQLEndpoint()
 
     if (endpoint.schema) {
       validateSpecificationData(operationName, specData, endpoint.schema)
     }
 
-    endpoint.specifications.set(operationName, {
-      operationName,
-      data: specData,
-      consumed: false,
-    })
+    const specification = { operationName, data: specData, remaining: 1 }
+    endpoint.specifications.set(operationName, specification)
+
+    return { repeat: (n: number) => { specification.remaining = n } }
   }
+
+  if (typeof methodOrData === 'string') {
+    const url = dataOrMethodOrUrl
+    const method = methodOrData.toUpperCase()
+    const specData = _data!
+    const endpoint = registry.get(url)
+    if (!endpoint) throw new Error(`No endpoint registered for URL: ${url}`)
+    const specification = { operationName, method, data: specData, remaining: 1 }
+    endpoint.specifications.set(method, specification)
+    return { repeat: (n: number) => { specification.remaining = n } }
+  }
+
+  const method = dataOrMethodOrUrl.toUpperCase()
+  const specData = methodOrData!
+  const endpoint = findRestEndpoint()
+  const specification = { operationName, method, data: specData, remaining: 1 }
+  endpoint.specifications.set(method, specification)
+  return { repeat: (n: number) => { specification.remaining = n } }
 }
