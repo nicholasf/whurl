@@ -36,12 +36,17 @@ export type RegisterFn = (url: EndpointURL) => void
 /** Registers a GraphQL endpoint, parsing and validating the schema string immediately. */
 export type RegisterWithSchemaFn = (url: EndpointURL, schemaString: string) => void
 
-/** A single specification stored on an endpoint, consumed once by default. */
+/** Returned by specify — allows chaining .repeat(n) to set how many times the specification can be matched. */
+export type SpecificationHandle = {
+  repeat: (n: number) => void
+}
+
+/** A single specification stored on an endpoint. Matched up to remaining times before exhaustion. */
 export type Specification = {
   operationName?: string
   query?: string
   data: SpecifyData
-  consumed: boolean
+  remaining: number
 }
 
 /** The response data shape returned by a specification. */
@@ -49,6 +54,6 @@ export type SpecifyData = Record<string, unknown>
 
 /** Declares a specification on a registered endpoint. Accepts two or three arguments. */
 export type SpecifyFn = {
-  (operationName: string, data: SpecifyData): void
-  (operationName: string, verbOrUrl: string, data: SpecifyData): void
+  (operationName: string, data: SpecifyData): SpecificationHandle
+  (operationName: string, verbOrUrl: string, data: SpecifyData): SpecificationHandle
 }

@@ -2,7 +2,7 @@
 import { buildSchema, getNamedType, isObjectType, type GraphQLSchema } from 'graphql'
 import { createMSWInterceptor } from './interceptors/msw.js'
 import { createHurlReporter } from './reporters/hurl.js'
-import type { Endpoint, EndpointURL, RegisterFn, RegisterWithSchemaFn, Reporter, SpecifyFn, SpecifyData } from './types.js'
+import type { Endpoint, EndpointURL, RegisterFn, RegisterWithSchemaFn, Reporter, SpecificationHandle, SpecifyFn, SpecifyData } from './types.js'
 
 const registry = new Map<EndpointURL, Endpoint>()
 
@@ -29,9 +29,9 @@ const resolveRequest = async (request: Request): Promise<SpecifyData | null> => 
     if (!operationName) return null
 
     const specification = endpoint.specifications.get(operationName)
-    if (!specification || specification.consumed) return null
+    if (!specification || specification.remaining <= 0) return null
 
-    specification.consumed = true
+    specification.remaining -= 1
 
     if (reporter) {
       await reporter.report({
@@ -133,9 +133,10 @@ export const specify: SpecifyFn = (
   operationName: string,
   dataOrVerbOrUrl: SpecifyData | string,
   _data?: SpecifyData
-): void => {
+): SpecificationHandle => {
   if (typeof dataOrVerbOrUrl === 'string') {
     // three-argument form: operationName, verbOrUrl, data — to be implemented
+    return { repeat: (_n: number) => {} }
   } else {
     const specData = dataOrVerbOrUrl
     const endpoint = findGraphQLEndpoint()
@@ -144,10 +145,9 @@ export const specify: SpecifyFn = (
       validateSpecificationData(operationName, specData, endpoint.schema)
     }
 
-    endpoint.specifications.set(operationName, {
-      operationName,
-      data: specData,
-      consumed: false,
-    })
+    const specification = { operationName, data: specData, remaining: 1 }
+    endpoint.specifications.set(operationName, specification)
+
+    return { repeat: (n: number) => { specification.remaining = n } }
   }
 }

@@ -50,7 +50,7 @@ describe('GraphQL specifications', () => {
 
   describe('specification storage', () => {
     it('stores a query specification on the endpoint', () => {
-      specify('Me', { me: { id: '1', name: 'Nicholas', email: 'nicholas@example.com' } })
+      specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
 
       const endpoint = _getEndpoint(graphqlURL)
       expect(endpoint.specifications.has('Me')).toBe(true)
@@ -59,7 +59,7 @@ describe('GraphQL specifications', () => {
     it('stores a list query specification on the endpoint', () => {
       specify('Posts', {
         posts: [
-          { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Nicholas', email: 'nicholas@example.com' } },
+          { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } },
         ]
       })
 
@@ -69,7 +69,7 @@ describe('GraphQL specifications', () => {
 
     it('stores a mutation specification on the endpoint', () => {
       specify('CreatePost', {
-        createPost: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Nicholas', email: 'nicholas@example.com' } }
+        createPost: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }
       })
 
       const endpoint = _getEndpoint(graphqlURL)
@@ -89,20 +89,27 @@ describe('GraphQL specifications', () => {
 
     it('throws when no endpoint is registered', () => {
       reset()
-      expect(() => specify('Me', { me: { id: '1', name: 'Nicholas', email: 'nicholas@example.com' } })).toThrow()
+      expect(() => specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })).toThrow()
     })
 
-    it('marks a specification as not consumed when stored', () => {
-      specify('Me', { me: { id: '1', name: 'Nicholas', email: 'nicholas@example.com' } })
+    it('sets remaining to 1 when stored', () => {
+      specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
 
       const endpoint = _getEndpoint(graphqlURL)
-      expect(endpoint.specifications.get('Me')?.consumed).toBe(false)
+      expect(endpoint.specifications.get('Me')?.remaining).toBe(1)
+    })
+
+    it('sets remaining to n when .repeat(n) is chained', () => {
+      specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }).repeat(3)
+
+      const endpoint = _getEndpoint(graphqlURL)
+      expect(endpoint.specifications.get('Me')?.remaining).toBe(3)
     })
   })
 
   describe('request interception', () => {
     it('returns specified data for a query', async () => {
-      specify('Me', { me: { id: '1', name: 'Nicholas', email: 'nicholas@example.com' } })
+      specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
 
       const response = await fetch(graphqlURL, {
         method: 'POST',
@@ -111,12 +118,12 @@ describe('GraphQL specifications', () => {
       })
 
       const { data } = await response.json()
-      expect(data).toEqual({ me: { id: '1', name: 'Nicholas', email: 'nicholas@example.com' } })
+      expect(data).toEqual({ me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
     })
 
     it('returns specified data for a mutation', async () => {
       specify('CreatePost', {
-        createPost: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Nicholas', email: 'nicholas@example.com' } }
+        createPost: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }
       })
 
       const response = await fetch(graphqlURL, {
@@ -127,12 +134,12 @@ describe('GraphQL specifications', () => {
 
       const { data } = await response.json()
       expect(data).toEqual({
-        createPost: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Nicholas', email: 'nicholas@example.com' } }
+        createPost: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }
       })
     })
 
-    it('marks the specification as consumed after a request', async () => {
-      specify('Me', { me: { id: '1', name: 'Nicholas', email: 'nicholas@example.com' } })
+    it('decrements remaining after a request', async () => {
+      specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
 
       await fetch(graphqlURL, {
         method: 'POST',
@@ -141,7 +148,24 @@ describe('GraphQL specifications', () => {
       })
 
       const endpoint = _getEndpoint(graphqlURL)
-      expect(endpoint.specifications.get('Me')?.consumed).toBe(true)
+      expect(endpoint.specifications.get('Me')?.remaining).toBe(0)
+    })
+
+    it('serves the specification n times when .repeat(n) is set', async () => {
+      specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }).repeat(2)
+
+      const fetchMe = () => fetch(graphqlURL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+      })
+
+      const first = await (await fetchMe()).json()
+      const second = await (await fetchMe()).json()
+
+      expect(first.data).toEqual({ me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
+      expect(second.data).toEqual({ me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
+      expect(_getEndpoint(graphqlURL).specifications.get('Me')?.remaining).toBe(0)
     })
   })
 })

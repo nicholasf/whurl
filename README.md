@@ -131,7 +131,14 @@ query Me {
 }
 ```
 
-A specification is consumed once and then exhausted. The test that calls `specify` owns that specification for the duration of that test. Call `reset()` between tests to clear consumed state — the setup file handles this if you call it in `beforeEach`.
+By default a specification is matched once and then exhausted. Chain `.repeat(n)` to allow it to be matched more times:
+
+```ts
+specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })          // matched once
+specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }).repeat(3) // matched three times
+```
+
+Call `reset()` between tests to clear all specifications and registered endpoints:
 
 ```ts
 import { beforeEach } from 'vitest'
