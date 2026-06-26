@@ -1,10 +1,10 @@
 # whurl
 
-**whurl** mocks and validates your GraphQL calls using a service worker, and can also export them as Hurl assertions — verifying your queries, data shapes, and schema against the real backend. If you've wanted the GraphQL schema to act as a contract between frontend and backend — the way a Swagger file does for REST — whurl is built for that. No `vi.mock()` calls — your GraphQL client runs for real.
+Your HTTP client runs for real — whurl intercepts at the network layer, adds schema validation and query matching for GraphQL endpoints, and records interactions in Hurl format for later replay against the backend, if desired.
+
+**whurl** mocks and validates your GraphQL calls using a service worker, and can also export them as Hurl assertions — verifying your queries, data shapes, and schema against the real backend. If you've wanted the GraphQL schema to act as a contract between frontend and backend — the way a Swagger file does for REST — whurl is built for that. No `vi.mock()` calls.
 
 **whurl** combines two libraries: [msw](https://mswjs.io/) (Mock Service Worker) for HTTP interception in tests, and [Hurl](https://hurl.dev/) for contract verification against real backends. The name comes from **W**orker and **H**url.
-
-Your HTTP client runs for real — whurl intercepts at the network layer, and adds schema validation and query matching for GraphQL endpoints.
 
 Not just GraphQL. whurl works as a thin wrapper over MSW for any HTTP endpoint — REST APIs, OAuth providers, or any other HTTP dependency your components talk to. Every mock you write can be exported as a Hurl file.
 
