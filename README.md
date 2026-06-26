@@ -4,7 +4,9 @@
 
 **whurl** combines two libraries: [msw](https://mswjs.io/) (Mock Service Worker) for HTTP interception in tests, and [Hurl](https://hurl.dev/) for contract verification against real backends. The name comes from **W**orker and **H**url.
 
-Your GraphQL client runs for real — whurl intercepts at the network layer. You can also mock non-GraphQL endpoints (such as OAuth providers).
+Your HTTP client runs for real — whurl intercepts at the network layer, and adds schema validation and query matching for GraphQL endpoints.
+
+Not just GraphQL. whurl works as a thin wrapper over MSW for any HTTP endpoint — REST APIs, OAuth providers, or any other HTTP dependency your components talk to. Every mock you write can be exported as a Hurl file.
 
 The FE _registers_ an endpoint with a GraphQL schema then _specifies_ operations along with the data they will return. These queries are validated against the schema at runtime. When the test results in a call to the backend, the specified data is returned. All of this thanks to [msw](https://mswjs.io/).
 
