@@ -1,16 +1,10 @@
 # whurl
 
-Your HTTP client runs for real — whurl intercepts at the network layer, adds schema validation and query matching for GraphQL endpoints, and records interactions in Hurl format for later replay against the backend, if desired.
+**whurl** intercepts HTTP calls in tests at the network layer — no `vi.mock()` calls, your real client code runs. For GraphQL endpoints it validates queries and data shapes against your schema. For any other endpoint — REST APIs, OAuth providers, external services — it works as a thin wrapper over MSW. Either way, every intercepted call can be recorded as a Hurl file and replayed against a real backend later.
 
-**whurl** mocks and validates your GraphQL calls using a service worker, and can also export them as Hurl assertions — verifying your queries, data shapes, and schema against the real backend. If you've wanted the GraphQL schema to act as a contract between frontend and backend — the way a Swagger file does for REST — whurl is built for that. No `vi.mock()` calls.
+If you've wanted a GraphQL schema to act as a contract between frontend and backend — the way a Swagger file does for REST — whurl is built for that.
 
 **whurl** combines two libraries: [msw](https://mswjs.io/) (Mock Service Worker) for HTTP interception in tests, and [Hurl](https://hurl.dev/) for contract verification against real backends. The name comes from **W**orker and **H**url.
-
-Not just GraphQL. whurl works as a thin wrapper over MSW for any HTTP endpoint — REST APIs, OAuth providers, or any other HTTP dependency your components talk to. Every mock you write can be exported as a Hurl file.
-
-The FE _registers_ an endpoint with a GraphQL schema then _specifies_ operations along with the data they will return. These queries are validated against the schema at runtime. When the test results in a call to the backend, the specified data is returned. All of this thanks to [msw](https://mswjs.io/).
-
-Later, if you want, you can convert all of these queries to the [Hurl](https://hurl.dev/) format and run them against your backend (with variable substitution).
 
 ```ts
 import { render, screen } from '@testing-library/react'
