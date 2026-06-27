@@ -11,10 +11,10 @@ importers:
       graphql:
         specifier: ^17.0.1
         version: 17.0.1
-    devDependencies:
       msw:
         specifier: ^2.14.6
         version: 2.14.6(@types/node@26.0.1)(typescript@5.9.3)
+    devDependencies:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
