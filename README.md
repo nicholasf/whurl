@@ -9,7 +9,7 @@ If you've wanted a GraphQL schema to act as a contract between frontend and back
 ```ts
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect, beforeEach } from 'vitest'
-import { registerWithSchema, specify, reset } from 'whurl'
+import { registerWithSchema, specify, reset } from '@nicholasf/whurl'
 import { DashboardPage } from './pages/DashboardPage'
 import { schema } from '../tests/schema'
 
@@ -56,6 +56,12 @@ The backend team runs this against their real implementation — no frontend req
 hurl whurl/*.hurl
 ```
 
+## Installation
+
+```bash
+npm install @nicholasf/whurl
+```
+
 ## Setup
 
 Call `start()` and `stop()` in your test setup file:
@@ -63,7 +69,7 @@ Call `start()` and `stop()` in your test setup file:
 ```ts
 // tests/setup.ts
 import { beforeAll, afterAll } from 'vitest'
-import { start, stop } from 'whurl'
+import { start, stop } from '@nicholasf/whurl'
 
 beforeAll(() => start())
 afterAll(() => stop())
@@ -83,7 +89,7 @@ export default {
 For a plain HTTP endpoint:
 
 ```ts
-import { register } from 'whurl'
+import { register } from '@nicholasf/whurl'
 
 register('http://localhost:3000/api/accounts')
 ```
@@ -91,7 +97,7 @@ register('http://localhost:3000/api/accounts')
 For a GraphQL endpoint, provide the schema string. whurl parses it immediately and throws if it is invalid:
 
 ```ts
-import { registerWithSchema } from 'whurl'
+import { registerWithSchema } from '@nicholasf/whurl'
 
 registerWithSchema('http://localhost:3000/graphql', `
   type User { id: ID! name: String! email: String! }
@@ -104,7 +110,7 @@ registerWithSchema('http://localhost:3000/graphql', `
 A specification declares what a GraphQL operation should return. whurl validates the response shape against the registered schema and intercepts the matching request, returning the specified data.
 
 ```ts
-import { registerWithSchema, specify } from 'whurl'
+import { registerWithSchema, specify } from '@nicholasf/whurl'
 
 registerWithSchema('http://localhost:3000/graphql', schema)
 
@@ -138,7 +144,7 @@ Call `reset()` between tests to clear all specifications and registered endpoint
 
 ```ts
 import { beforeEach } from 'vitest'
-import { reset } from 'whurl'
+import { reset } from '@nicholasf/whurl'
 
 beforeEach(() => reset())
 ```
@@ -150,7 +156,7 @@ whurl can intercept any HTTP endpoint, not just GraphQL. This is useful for mock
 Register a plain endpoint with `register()`, then declare specifications using the three-argument form — operation name, HTTP method, and response data:
 
 ```ts
-import { register, specify } from 'whurl'
+import { register, specify } from '@nicholasf/whurl'
 
 register('http://auth.example.com/oauth/token')
 
