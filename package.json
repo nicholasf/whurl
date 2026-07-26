@@ -1,6 +1,6 @@
 {
   "name": "@nicholasf/whurl",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "GraphQL test double and contract layer",
   "license": "MIT",
