@@ -113,18 +113,20 @@ const findGraphQLEndpoint = (): Endpoint => {
 }
 
 const validateSpecificationData = (operationName: string, data: SpecifyData, schema: GraphQLSchema): void => {
-  const fieldName = operationName.charAt(0).toLowerCase() + operationName.slice(1)
+  const keys = Object.keys(data)
+  if (keys.length !== 1) {
+    throw new Error(
+      `Expected response data for '${operationName}' to have exactly one top-level key (the field name), got: ${keys.join(', ') || '(none)'}`
+    )
+  }
+  const fieldName = keys[0]!
 
   const queryType = schema.getQueryType()
   const mutationType = schema.getMutationType()
   const field = queryType?.getFields()[fieldName] ?? mutationType?.getFields()[fieldName]
 
   if (!field) {
-    throw new Error(`No query or mutation named '${fieldName}' found in schema`)
-  }
-
-  if (!(fieldName in data)) {
-    throw new Error(`Expected response data to have key '${fieldName}'`)
+    throw new Error(`No query or mutation field named '${fieldName}' found in schema (from specify('${operationName}', ...))`)
   }
 
   const namedType = getNamedType(field.type)
