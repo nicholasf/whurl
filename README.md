@@ -94,7 +94,7 @@ import { register } from '@nicholasf/whurl'
 register('http://localhost:3000/api/accounts')
 ```
 
-For a GraphQL endpoint, provide the schema string. whurl parses it immediately and throws if it is invalid:
+For a GraphQL endpoint, provide the schema string. The schema isn't just parsed once and discarded — whurl keeps it, because every specification you declare later (see [Specifications](#specifications)) is checked against it. That's the difference between whurl and a plain stub: if a mocked response has a typo'd field name, references a field that doesn't exist on the type, or is missing a field the operation actually returns, whurl throws at `specify()` time — not later, as a confusing failure against the real API, or worse, not at all.
 
 ```ts
 import { registerWithSchema } from '@nicholasf/whurl'
@@ -104,6 +104,8 @@ registerWithSchema('http://localhost:3000/graphql', `
   type Query { me: User }
 `)
 ```
+
+whurl also parses the schema string immediately and throws if it's invalid, so a broken schema fails fast here rather than surfacing later as a confusing `specify()` error.
 
 ## Specifications
 
