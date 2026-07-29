@@ -1,6 +1,6 @@
 {
   "name": "@nicholasf/whurl",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "description": "GraphQL test double and contract layer",
   "license": "MIT",
@@ -20,6 +20,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@urql/core": "^6.0.3",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },

@@ -10,19 +10,34 @@ const reporter: Reporter | null = process.env['WHURL'] === 'true'
   ? createHurlReporter()
   : null
 
+// Endpoints are matched on origin + pathname. GraphQL clients that send queries
+// via GET (urql defaults to this when the query fits in the URL, and Apollo/
+// graphql-request support it too) append query/operationName/variables as URL
+// search params, so matching on the full URL would miss every GET request.
+const normalizeURL = (url: string): EndpointURL => {
+  const parsed = new URL(url)
+  return `${parsed.origin}${parsed.pathname}`
+}
+
+const parseGraphQLQuery = async (request: Request): Promise<string> => {
+  if (request.method === 'GET') {
+    return new URL(request.url).searchParams.get('query') ?? ''
+  }
+
+  try {
+    const body = await request.json() as { query?: string }
+    return body.query ?? ''
+  } catch {
+    return ''
+  }
+}
+
 const resolveRequest = async (request: Request): Promise<SpecifyData | null> => {
-  const endpoint = registry.get(request.url)
+  const endpoint = registry.get(normalizeURL(request.url))
   if (!endpoint) return null
 
   if (endpoint.schema) {
-    let body: { query?: string }
-    try {
-      body = await request.json() as { query?: string }
-    } catch {
-      return null
-    }
-
-    const query = body.query ?? ''
+    const query = await parseGraphQLQuery(request)
     const match = query.match(/(?:query|mutation|subscription)\s+(\w+)/)
     const operationName = match?.[1]
 
@@ -75,7 +90,7 @@ export const reset = (): void => {
 }
 
 export const _getEndpoint = (url: EndpointURL): Endpoint => {
-  const endpoint = registry.get(url)
+  const endpoint = registry.get(normalizeURL(url))
   if (!endpoint) {
     throw new Error(`No endpoint registered for URL: ${url}`)
   }
@@ -144,19 +159,21 @@ const validateSpecificationData = (operationName: string, data: SpecifyData, sch
 
 export const register: RegisterFn = (url: EndpointURL): void => {
   validateURL(url)
-  if (registry.has(url)) {
+  const key = normalizeURL(url)
+  if (registry.has(key)) {
     throw new Error(`Endpoint already registered: ${url}`)
   }
-  registry.set(url, { url, specifications: new Map() })
+  registry.set(key, { url, specifications: new Map() })
 }
 
 export const registerWithSchema: RegisterWithSchemaFn = (url: EndpointURL, schemaString: string): void => {
   validateURL(url)
-  if (registry.has(url)) {
+  const key = normalizeURL(url)
+  if (registry.has(key)) {
     throw new Error(`Endpoint already registered: ${url}`)
   }
   const schema = buildSchema(schemaString)
-  registry.set(url, { url, schema, specifications: new Map() })
+  registry.set(key, { url, schema, specifications: new Map() })
 }
 
 export const specify: SpecifyFn = (
@@ -183,7 +200,7 @@ export const specify: SpecifyFn = (
     const url = dataOrMethodOrUrl
     const method = methodOrData.toUpperCase()
     const specData = _data!
-    const endpoint = registry.get(url)
+    const endpoint = registry.get(normalizeURL(url))
     if (!endpoint) throw new Error(`No endpoint registered for URL: ${url}`)
     const specification = { operationName, method, data: specData, remaining: 1 }
     endpoint.specifications.set(method, specification)
