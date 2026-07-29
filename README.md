@@ -6,6 +6,8 @@ If you've wanted a GraphQL schema to act as a contract between frontend and back
 
 **whurl** combines two libraries: [msw](https://mswjs.io/) (Mock Service Worker) for HTTP interception in tests, and [Hurl](https://hurl.dev/) for contract verification against real backends. The name comes from **W**orker and **H**url.
 
+It works at both the client and server layer. Despite the name, MSW's Node implementation doesn't run an actual browser Service Worker — it patches Node's own `http.ClientRequest.prototype` directly (see [Server-to-server calls](#server-to-server-calls)), so the same interception mocks a frontend component's call to your API just as well as a backend service's own outbound call to a downstream dependency. The example below is a React component, but that's just the example — whurl works the same way from a Node test with no browser involved.
+
 ```ts
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect, beforeEach } from 'vitest'
@@ -170,6 +172,26 @@ specify('ExchangeToken', 'POST', {
 ```
 
 whurl is just MSW here — `register` + `specify` is a thin DSL over an MSW handler. The intercept, the response envelope, the lifecycle — all MSW. whurl adds the operation name as a label and the `.repeat(n)` lifetime on top.
+
+## Server-to-server calls
+
+whurl's interceptor uses `setupServer` from `msw/node`, not `msw/browser`. `msw/node` works by patching Node's own `http.ClientRequest.prototype` (and the equivalent hook for `fetch`/undici) directly in the process — there's no Service Worker or DOM involved. That patch catches any outgoing request made from that Node process, regardless of whether the caller is a React component's `fetch()` during a jsdom test or a backend service's own outbound call to a downstream API. Vitest already runs tests in a plain Node process by default, so this falls out for free:
+
+```ts
+import { register, specify, reset } from '@nicholasf/whurl'
+import { getExchangeRate } from './exchangeRateService'
+
+beforeEach(() => reset())
+
+it('fetches the current exchange rate', async () => {
+  register('https://api.exchangerate.example.com/latest')
+  specify('GetRate', 'GET', { base: 'USD', rates: { EUR: 0.92 } })
+
+  const rate = await getExchangeRate('EUR')
+
+  expect(rate).toBe(0.92)
+})
+```
 
 ## Hurl export
 
