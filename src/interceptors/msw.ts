@@ -1,15 +1,21 @@
 import { setupServer } from 'msw/node'
-import { http, HttpResponse, passthrough } from 'msw'
-import type { Interceptor, SpecifyData } from '../types.js'
+import { http, HttpResponse, passthrough, type JsonBodyType } from 'msw'
+import type { Interceptor, Resolution } from '../types.js'
 
-type RequestResolver = (request: Request) => Promise<SpecifyData | null>
+type RequestResolver = (request: Request) => Promise<Resolution>
 
 export const createMSWInterceptor = (resolve: RequestResolver): Interceptor => {
   const server = setupServer(
     http.all('*', async ({ request }) => {
-      const data = await resolve(request)
-      if (data === null) return passthrough()
-      return HttpResponse.json({ data })
+      const resolution = await resolve(request)
+
+      if (resolution.kind === 'passthrough') return passthrough()
+      if (resolution.kind === 'networkError') return HttpResponse.error()
+
+      const { status, body } = resolution
+      return typeof body === 'string'
+        ? new HttpResponse(body, { status })
+        : HttpResponse.json(body as JsonBodyType, { status })
     })
   )
 

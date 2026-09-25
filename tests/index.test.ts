@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { register, registerWithSchema, reset, specify, _getEndpoint } from '../src/index.js'
+import { register, registerWithSchema, reset, specify, specifyNetworkError, _getEndpoint } from '../src/index.js'
 import { schema } from './schema.js'
 
 const graphqlURL = 'http://localhost:3000/graphql'
@@ -260,5 +260,121 @@ describe('multiple registrations', () => {
 
     expect(_getEndpoint(accountsURL).specifications.get('GET')?.operationName).toBe('GetAccount')
     expect(_getEndpoint(postsURL).specifications.get('GET')?.operationName).toBe('GetPost')
+  })
+})
+
+describe('a leading status on specify', () => {
+  describe('GraphQL form', () => {
+    beforeEach(() => {
+      registerWithSchema(graphqlURL, schema)
+    })
+
+    it('sends the body unwrapped and unvalidated, at the given status', async () => {
+      specify(403, 'Me', { errors: [{ message: 'forbidden', extensions: { code: 'UNAUTHORISED' } }] })
+
+      const response = await fetch(graphqlURL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+      })
+
+      expect(response.status).toBe(403)
+      expect(await response.json()).toEqual({ errors: [{ message: 'forbidden', extensions: { code: 'UNAUTHORISED' } }] })
+    })
+
+    it('defaults to status 200 when the status is a GraphQL error riding on a normal response', async () => {
+      specify(200, 'Me', { errors: [{ message: 'forbidden' }] })
+
+      const response = await fetch(graphqlURL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+      })
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ errors: [{ message: 'forbidden' }] })
+    })
+
+    it('sends a string body as-is, unparsed as JSON', async () => {
+      specify(200, 'Me', 'not valid json')
+
+      const response = await fetch(graphqlURL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+      })
+
+      const clone = response.clone()
+      expect(await response.text()).toBe('not valid json')
+      await expect(clone.json()).rejects.toThrow()
+    })
+  })
+
+  describe('REST form', () => {
+    beforeEach(() => {
+      register(restURL)
+    })
+
+    it('sends the body unwrapped, at the given status', async () => {
+      specify(401, 'GetAccount', 'GET', { error: 'invalid_grant', error_description: 'Refresh token expired' })
+
+      const response = await fetch(restURL, { method: 'GET' })
+
+      expect(response.status).toBe(401)
+      expect(await response.json()).toEqual({ error: 'invalid_grant', error_description: 'Refresh token expired' })
+    })
+  })
+
+  describe('REST form with an explicit URL', () => {
+    const accountsURL = 'http://localhost:3000/api/accounts'
+    const postsURL = 'http://localhost:3000/api/posts'
+
+    beforeEach(() => {
+      register(accountsURL)
+      register(postsURL)
+    })
+
+    it('resolves to the correct endpoint and sends the body unwrapped, at the given status', async () => {
+      specify(403, 'GetAccount', accountsURL, 'GET', { error: 'access_denied' })
+
+      const response = await fetch(accountsURL, { method: 'GET' })
+
+      expect(response.status).toBe(403)
+      expect(await response.json()).toEqual({ error: 'access_denied' })
+    })
+  })
+})
+
+describe('specifyNetworkError', () => {
+  beforeEach(() => {
+    registerWithSchema(graphqlURL, schema)
+  })
+
+  it('makes the call reject instead of resolving', async () => {
+    specifyNetworkError('Me')
+
+    await expect(
+      fetch(graphqlURL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+      })
+    ).rejects.toThrow('Failed to fetch')
+  })
+
+  it('decrements remaining after a request, same as a response specification', async () => {
+    specifyNetworkError('Me')
+
+    await fetch(graphqlURL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+    }).catch(() => {})
+
+    expect(_getEndpoint(graphqlURL).specifications.get('Me')?.remaining).toBe(0)
+  })
+
+  it('does not require the body to match the schema, since there is no body', () => {
+    expect(() => specifyNetworkError('NotAField')).not.toThrow()
   })
 })
