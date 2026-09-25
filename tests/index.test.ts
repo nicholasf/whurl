@@ -1,9 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { register, registerWithSchema, reset, specify, specifyNetworkError, _getEndpoint } from '../src/index.js'
+import type { Endpoint, Specification } from '../src/types.js'
 import { schema } from './schema.js'
 
 const graphqlURL = 'http://localhost:3000/graphql'
 const restURL = 'http://localhost:3000/api'
+
+// Avoids asserting against graphql-js's exact canonical print() format —
+// only that a specification was stored, and which one, by position.
+const graphqlSpecificationsFor = (endpoint: Endpoint): Specification[] => [...endpoint.graphqlSpecifications.values()].flat()
+
+const meDocument = `query Me { me { id name email } }`
+const postsDocument = `query Posts { posts { id title body author { id name email } } }`
+const createPostDocument = `mutation CreatePost { createPost { id title body author { id name email } } }`
+const deletePostDocument = `mutation DeletePost { deletePost }`
 
 beforeEach(() => {
   reset()
@@ -50,71 +60,101 @@ describe('GraphQL specifications', () => {
 
   describe('specification storage', () => {
     it('stores a query specification on the endpoint', () => {
-      specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
+      specify({
+        operationName: 'Me',
+        document: meDocument,
+        variables: {},
+        response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } },
+      })
 
       const endpoint = _getEndpoint(graphqlURL)
-      expect(endpoint.specifications.has('Me')).toBe(true)
+      expect(graphqlSpecificationsFor(endpoint)).toHaveLength(1)
     })
 
     it('stores a list query specification on the endpoint', () => {
-      specify('Posts', {
-        posts: [
-          { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } },
-        ]
+      specify({
+        operationName: 'Posts',
+        document: postsDocument,
+        variables: {},
+        response: {
+          posts: [
+            { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } },
+          ],
+        },
       })
 
       const endpoint = _getEndpoint(graphqlURL)
-      expect(endpoint.specifications.has('Posts')).toBe(true)
+      expect(endpoint.graphqlSpecifications.size).toBe(1)
     })
 
     it('stores a mutation specification on the endpoint', () => {
-      specify('CreatePost', {
-        createPost: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }
+      specify({
+        operationName: 'CreatePost',
+        document: createPostDocument,
+        variables: {},
+        response: { createPost: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } },
       })
 
       const endpoint = _getEndpoint(graphqlURL)
-      expect(endpoint.specifications.has('CreatePost')).toBe(true)
+      expect(endpoint.graphqlSpecifications.size).toBe(1)
     })
 
     it('stores a boolean mutation specification on the endpoint', () => {
-      specify('DeletePost', { deletePost: true })
+      specify({
+        operationName: 'DeletePost',
+        document: deletePostDocument,
+        variables: {},
+        response: { deletePost: true },
+      })
 
       const endpoint = _getEndpoint(graphqlURL)
-      expect(endpoint.specifications.has('DeletePost')).toBe(true)
+      expect(endpoint.graphqlSpecifications.size).toBe(1)
     })
 
     it('throws when data does not match the schema', () => {
-      expect(() => specify('Me', { me: { nonExistentField: 'value' } })).toThrow()
+      expect(() =>
+        specify({ operationName: 'Me', document: meDocument, variables: {}, response: { me: { nonExistentField: 'value' } } })
+      ).toThrow()
+    })
+
+    it('throws when the given operationName does not match the document', () => {
+      expect(() =>
+        specify({ operationName: 'NotMe', document: meDocument, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } })
+      ).toThrow(`operationName 'NotMe' does not match the operation named 'Me'`)
     })
 
     it('throws when no endpoint is registered', () => {
       reset()
-      expect(() => specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })).toThrow()
+      expect(() =>
+        specify({ operationName: 'Me', document: meDocument, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } })
+      ).toThrow()
     })
 
     it('sets remaining to 1 when stored', () => {
-      specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
+      specify({ operationName: 'Me', document: meDocument, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } })
 
       const endpoint = _getEndpoint(graphqlURL)
-      expect(endpoint.specifications.get('Me')?.remaining).toBe(1)
+      const [specification] = graphqlSpecificationsFor(endpoint)
+      expect(specification!.remaining).toBe(1)
     })
 
     it('sets remaining to n when .repeat(n) is chained', () => {
-      specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }).repeat(3)
+      specify({ operationName: 'Me', document: meDocument, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } }).repeat(3)
 
       const endpoint = _getEndpoint(graphqlURL)
-      expect(endpoint.specifications.get('Me')?.remaining).toBe(3)
+      const [specification] = graphqlSpecificationsFor(endpoint)
+      expect(specification!.remaining).toBe(3)
     })
   })
 
   describe('request interception', () => {
     it('returns specified data for a query', async () => {
-      specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
+      specify({ operationName: 'Me', document: meDocument, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } })
 
       const response = await fetch(graphqlURL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+        body: JSON.stringify({ query: meDocument }),
       })
 
       const { data } = await response.json()
@@ -122,14 +162,17 @@ describe('GraphQL specifications', () => {
     })
 
     it('returns specified data for a mutation', async () => {
-      specify('CreatePost', {
-        createPost: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }
+      specify({
+        operationName: 'CreatePost',
+        document: createPostDocument,
+        variables: {},
+        response: { createPost: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } },
       })
 
       const response = await fetch(graphqlURL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'mutation CreatePost { createPost { id title body author { id name email } } }' }),
+        body: JSON.stringify({ query: createPostDocument }),
       })
 
       const { data } = await response.json()
@@ -138,26 +181,97 @@ describe('GraphQL specifications', () => {
       })
     })
 
+    it('matches a query with variables only when the variables match', async () => {
+      const withVariablesDocument = `query Post($id: ID!) { post(id: $id) { id title body author { id name email } } }`
+
+      specify({
+        operationName: 'Post',
+        document: withVariablesDocument,
+        variables: { id: '1' },
+        response: { post: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } },
+      })
+
+      // No specification matches these variables, so the request passes
+      // through to the real (non-existent) host and the fetch itself fails —
+      // the same passthrough behaviour exercised in interceptors/msw.test.ts.
+      await expect(
+        fetch(graphqlURL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: withVariablesDocument, variables: { id: '2' } }),
+        })
+      ).rejects.toThrow()
+
+      const rightVariables = await fetch(graphqlURL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: withVariablesDocument, variables: { id: '1' } }),
+      })
+      const { data } = await rightVariables.json()
+      expect(data).toEqual({ post: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } })
+    })
+
+    it('does not confuse a document with a different shape but the same operation name', async () => {
+      const shortMeDocument = `query Me { me { id } }`
+
+      specify({ operationName: 'Me', document: meDocument, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } })
+
+      // shortMeDocument has the same operation name but a different shape,
+      // so it doesn't match the registered document — the request passes
+      // through to the real (non-existent) host and the fetch itself fails.
+      await expect(
+        fetch(graphqlURL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: shortMeDocument }),
+        })
+      ).rejects.toThrow()
+    })
+
+    it('is insensitive to whitespace differences between the registered and sent document', async () => {
+      const formattedMeDocument = `
+        query Me {
+          me {
+            id
+            name
+            email
+          }
+        }
+      `
+
+      specify({ operationName: 'Me', document: formattedMeDocument, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } })
+
+      const response = await fetch(graphqlURL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: meDocument }),
+      })
+
+      const { data } = await response.json()
+      expect(data).toEqual({ me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
+    })
+
     it('decrements remaining after a request', async () => {
-      specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
+      specify({ operationName: 'Me', document: meDocument, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } })
 
       await fetch(graphqlURL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+        body: JSON.stringify({ query: meDocument }),
       })
 
       const endpoint = _getEndpoint(graphqlURL)
-      expect(endpoint.specifications.get('Me')?.remaining).toBe(0)
+      const [specification] = graphqlSpecificationsFor(endpoint)
+      expect(specification!.remaining).toBe(0)
     })
 
     it('serves the specification n times when .repeat(n) is set', async () => {
-      specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }).repeat(2)
+      specify({ operationName: 'Me', document: meDocument, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } }).repeat(2)
 
       const fetchMe = () => fetch(graphqlURL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+        body: JSON.stringify({ query: meDocument }),
       })
 
       const first = await (await fetchMe()).json()
@@ -165,7 +279,27 @@ describe('GraphQL specifications', () => {
 
       expect(first.data).toEqual({ me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
       expect(second.data).toEqual({ me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
-      expect(_getEndpoint(graphqlURL).specifications.get('Me')?.remaining).toBe(0)
+
+      const endpoint = _getEndpoint(graphqlURL)
+      const [specification] = graphqlSpecificationsFor(endpoint)
+      expect(specification!.remaining).toBe(0)
+    })
+
+    it('serves a second registration of the same document and variables only after the first is exhausted', async () => {
+      specify({ operationName: 'Me', document: meDocument, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } })
+      specify({ operationName: 'Me', document: meDocument, variables: {}, response: { me: { id: '2', name: 'Luke Skywalker', email: 'luke.skywalker@example.com' } } })
+
+      const fetchMe = () => fetch(graphqlURL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: meDocument }),
+      })
+
+      const first = await (await fetchMe()).json()
+      const second = await (await fetchMe()).json()
+
+      expect(first.data.me.id).toBe('1')
+      expect(second.data.me.id).toBe('2')
     })
   })
 })
@@ -184,16 +318,16 @@ describe('verbose logging', () => {
   it('logs the Hurl-formatted request to stdout when a GraphQL spec is matched', async () => {
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })
+    specify({ operationName: 'Me', document: meDocument, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } })
 
     await fetch(graphqlURL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+      body: JSON.stringify({ query: meDocument }),
     })
 
     expect(spy).toHaveBeenCalledWith(
-      `POST ${graphqlURL}\nContent-Type: application/json\n\n${JSON.stringify({ query: 'query Me { me { id name email } }' }, null, 2)}`
+      `POST ${graphqlURL}\nContent-Type: application/json\n\n${JSON.stringify({ query: meDocument }, null, 2)}`
     )
   })
 
@@ -201,7 +335,7 @@ describe('verbose logging', () => {
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     register(restURL)
-    specify('GetAccount', 'GET', { id: '1', name: 'Darth Vader' })
+    specify({ operationName: 'GetAccount', method: 'GET', response: { id: '1', name: 'Darth Vader' } })
 
     await fetch(restURL, { method: 'GET' })
 
@@ -215,7 +349,7 @@ describe('non-GraphQL specifications', () => {
   })
 
   it('stores a REST specification on the endpoint', () => {
-    specify('GetAccount', 'GET', { id: '1', name: 'Darth Vader' })
+    specify({ operationName: 'GetAccount', method: 'GET', response: { id: '1', name: 'Darth Vader' } })
 
     const endpoint = _getEndpoint(restURL)
     expect(endpoint.specifications.has('GET')).toBe(true)
@@ -224,11 +358,11 @@ describe('non-GraphQL specifications', () => {
 
   it('throws when no plain endpoint is registered', () => {
     reset()
-    expect(() => specify('GetAccount', 'GET', { id: '1' })).toThrow('No plain endpoint registered.')
+    expect(() => specify({ operationName: 'GetAccount', method: 'GET', response: { id: '1' } })).toThrow('No plain endpoint registered.')
   })
 
   it('returns specified data for a GET request', async () => {
-    specify('GetAccount', 'GET', { id: '1', name: 'Darth Vader' })
+    specify({ operationName: 'GetAccount', method: 'GET', response: { id: '1', name: 'Darth Vader' } })
 
     const response = await fetch(restURL, { method: 'GET' })
     const data = await response.json()
@@ -255,27 +389,27 @@ describe('multiple registrations', () => {
     register(accountsURL)
     register(postsURL)
 
-    specify('GetAccount', accountsURL, 'GET', { id: '1' })
-    specify('GetPost', postsURL, 'GET', { id: '2' })
+    specify({ operationName: 'GetAccount', url: accountsURL, method: 'GET', response: { id: '1' } })
+    specify({ operationName: 'GetPost', url: postsURL, method: 'GET', response: { id: '2' } })
 
     expect(_getEndpoint(accountsURL).specifications.get('GET')?.operationName).toBe('GetAccount')
     expect(_getEndpoint(postsURL).specifications.get('GET')?.operationName).toBe('GetPost')
   })
 })
 
-describe('a leading status on specify', () => {
+describe('an explicit status on specify', () => {
   describe('GraphQL form', () => {
     beforeEach(() => {
       registerWithSchema(graphqlURL, schema)
     })
 
-    it('sends the body unwrapped and unvalidated, at the given status', async () => {
-      specify(403, 'Me', { errors: [{ message: 'forbidden', extensions: { code: 'UNAUTHORISED' } }] })
+    it('sends the response unwrapped and unvalidated, at the given status', async () => {
+      specify({ status: 403, operationName: 'Me', document: meDocument, variables: {}, response: { errors: [{ message: 'forbidden', extensions: { code: 'UNAUTHORISED' } }] } })
 
       const response = await fetch(graphqlURL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+        body: JSON.stringify({ query: meDocument }),
       })
 
       expect(response.status).toBe(403)
@@ -283,12 +417,12 @@ describe('a leading status on specify', () => {
     })
 
     it('defaults to status 200 when the status is a GraphQL error riding on a normal response', async () => {
-      specify(200, 'Me', { errors: [{ message: 'forbidden' }] })
+      specify({ status: 200, operationName: 'Me', document: meDocument, variables: {}, response: { errors: [{ message: 'forbidden' }] } })
 
       const response = await fetch(graphqlURL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+        body: JSON.stringify({ query: meDocument }),
       })
 
       expect(response.status).toBe(200)
@@ -296,12 +430,12 @@ describe('a leading status on specify', () => {
     })
 
     it('sends a string body as-is, unparsed as JSON', async () => {
-      specify(200, 'Me', 'not valid json')
+      specify({ status: 200, operationName: 'Me', document: meDocument, variables: {}, response: 'not valid json' })
 
       const response = await fetch(graphqlURL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+        body: JSON.stringify({ query: meDocument }),
       })
 
       const clone = response.clone()
@@ -315,8 +449,8 @@ describe('a leading status on specify', () => {
       register(restURL)
     })
 
-    it('sends the body unwrapped, at the given status', async () => {
-      specify(401, 'GetAccount', 'GET', { error: 'invalid_grant', error_description: 'Refresh token expired' })
+    it('sends the response unwrapped, at the given status', async () => {
+      specify({ status: 401, operationName: 'GetAccount', method: 'GET', response: { error: 'invalid_grant', error_description: 'Refresh token expired' } })
 
       const response = await fetch(restURL, { method: 'GET' })
 
@@ -334,8 +468,8 @@ describe('a leading status on specify', () => {
       register(postsURL)
     })
 
-    it('resolves to the correct endpoint and sends the body unwrapped, at the given status', async () => {
-      specify(403, 'GetAccount', accountsURL, 'GET', { error: 'access_denied' })
+    it('resolves to the correct endpoint and sends the response unwrapped, at the given status', async () => {
+      specify({ status: 403, operationName: 'GetAccount', url: accountsURL, method: 'GET', response: { error: 'access_denied' } })
 
       const response = await fetch(accountsURL, { method: 'GET' })
 
@@ -351,30 +485,33 @@ describe('specifyNetworkError', () => {
   })
 
   it('makes the call reject instead of resolving', async () => {
-    specifyNetworkError('Me')
+    specifyNetworkError({ operationName: 'Me', document: meDocument })
 
     await expect(
       fetch(graphqlURL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+        body: JSON.stringify({ query: meDocument }),
       })
     ).rejects.toThrow('Failed to fetch')
   })
 
   it('decrements remaining after a request, same as a response specification', async () => {
-    specifyNetworkError('Me')
+    specifyNetworkError({ operationName: 'Me', document: meDocument })
 
     await fetch(graphqlURL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: 'query Me { me { id name email } }' }),
+      body: JSON.stringify({ query: meDocument }),
     }).catch(() => {})
 
-    expect(_getEndpoint(graphqlURL).specifications.get('Me')?.remaining).toBe(0)
+    const endpoint = _getEndpoint(graphqlURL)
+    const [specification] = graphqlSpecificationsFor(endpoint)
+    expect(specification!.remaining).toBe(0)
   })
 
-  it('does not require the body to match the schema, since there is no body', () => {
-    expect(() => specifyNetworkError('NotAField')).not.toThrow()
+  it('does not require a response body to match the schema, since there is no body', () => {
+    const notAFieldDocument = `query NotAField { me { id } }`
+    expect(() => specifyNetworkError({ operationName: 'NotAField', document: notAFieldDocument })).not.toThrow()
   })
 })

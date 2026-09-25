@@ -6,26 +6,51 @@ whurl mocks a GraphQL endpoint straight from its schema, validating every reques
 registerWithSchema('http://localhost:4000/graphql', schema)
 register('http://auth.example.com/oauth/token')
 
+const WorldQuery = `query World { world { id name description isActive } }`
+const AccountsQuery = `query Accounts { accounts { id name username } }`
+
 // Success, status defaults to 200
-specify('World', { world: { id: 1, name: 'Aerthos', description: 'A shattered realm', isActive: true } })
+specify({
+  operationName: 'World',
+  document: WorldQuery,
+  variables: {},
+  response: { world: { id: 1, name: 'Aerthos', description: 'A shattered realm', isActive: true } },
+})
 
 // GraphQL error, still a 200 by convention, made explicit here
-specify(200, 'World', { errors: [{ message: 'forbidden', extensions: { code: 'UNAUTHORISED' } }] })
+specify({
+  status: 200,
+  operationName: 'World',
+  document: WorldQuery,
+  variables: {},
+  response: { errors: [{ message: 'forbidden', extensions: { code: 'UNAUTHORISED' } }] },
+})
 
 // A non-200 GraphQL response, e.g. behind a gateway that rejects before resolving
-specify(500, 'World', { errors: [{ message: 'internal server error' }] })
+specify({
+  status: 500,
+  operationName: 'World',
+  document: WorldQuery,
+  variables: {},
+  response: { errors: [{ message: 'internal server error' }] },
+})
 
 // Repeat a specification across multiple matches
-specify('Accounts', { accounts: [{ id: 1, name: 'Kestrel', username: 'kestrel_runs' }] }).repeat(3)
+specify({
+  operationName: 'Accounts',
+  document: AccountsQuery,
+  variables: {},
+  response: { accounts: [{ id: 1, name: 'Kestrel', username: 'kestrel_runs' }] },
+}).repeat(3)
 
 // REST, success, status defaults to 200
-specify('ExchangeToken', 'POST', { access_token: 'sith-token-abc123', token_type: 'Bearer', expires_in: 3600 })
+specify({ operationName: 'ExchangeToken', method: 'POST', response: { access_token: 'sith-token-abc123', token_type: 'Bearer', expires_in: 3600 } })
 
 // REST, failure, explicit status
-specify(401, 'ExchangeToken', 'POST', { error: 'invalid_grant', error_description: 'Refresh token expired' })
+specify({ status: 401, operationName: 'ExchangeToken', method: 'POST', response: { error: 'invalid_grant', error_description: 'Refresh token expired' } })
 
 // The call never reaches the server at all, TypeError: Failed to fetch
-specifyNetworkError('World')
+specifyNetworkError({ operationName: 'World', document: WorldQuery })
 ```
 
 **whurl** intercepts HTTP calls in tests at the network layer — no `vi.mock()` calls, your real client code runs. For GraphQL endpoints it validates queries and data shapes against your schema using [graphql-js](https://github.com/graphql/graphql-js), the GraphQL Foundation's reference implementation. For any other endpoint — REST APIs, OAuth providers, external services — it works as a thin wrapper over MSW. Either way, every intercepted call can be recorded as a Hurl file and replayed against a real backend later.
@@ -50,8 +75,12 @@ beforeEach(() => {
 
 describe('DashboardPage', () => {
   it('renders the authenticated user', async () => {
-    specify('Me', {  // intercepts the 'Me' query DashboardPage fires on mount
-      me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' }
+    // Intercepts the Me query DashboardPage fires on mount
+    specify({
+      operationName: 'Me',
+      document: `query Me { me { id name email } }`,
+      variables: {},
+      response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } },
     })
 
     render(<DashboardPage />)
@@ -146,12 +175,17 @@ import { registerWithSchema, specify } from '@nicholasf/whurl'
 
 registerWithSchema('http://localhost:3000/graphql', schema)
 
-specify('Me', {
-  me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' }
+specify({
+  operationName: 'Me',
+  document: `query Me { me { id name email } }`,
+  variables: {},
+  response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } },
 })
 ```
 
-Operations must be named. whurl matches specifications to intercepted requests by operation name:
+whurl matches a specification to an intercepted request by comparing `document` and the incoming request's document — both parsed and printed back out, so differences in whitespace or formatting don't matter — together with a deep-equality check between `variables` and the incoming request's variables. `operationName` plays no part in matching; whurl derives the real operation name from `document` and throws at `specify()` time if it doesn't match the `operationName` given.
+
+Operations must be named:
 
 ```graphql
 # ✓ whurl can match this
@@ -168,8 +202,29 @@ query Me {
 By default a specification is matched once and then exhausted. Chain `.repeat(n)` to allow it to be matched more times:
 
 ```ts
-specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } })          // matched once
-specify('Me', { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } }).repeat(3) // matched three times
+const meQuery = `query Me { me { id name email } }`
+
+specify({ operationName: 'Me', document: meQuery, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } })          // matched once
+specify({ operationName: 'Me', document: meQuery, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } }).repeat(3) // matched three times
+```
+
+Registering the same document and variables more than once queues the specifications — the first matching request consumes the first one registered, the next matching request consumes the second, and so on:
+
+```ts
+const meQuery = `query Me { me { id name email } }`
+
+specify({ operationName: 'Me', document: meQuery, variables: {}, response: { me: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } })
+specify({ operationName: 'Me', document: meQuery, variables: {}, response: { me: { id: '2', name: 'Luke Skywalker', email: 'luke.skywalker@example.com' } } })
+// First matching request returns Darth Vader, the next returns Luke Skywalker
+```
+
+Specifications for the same document with different variables are independent — each is matched only against a request carrying the same variables:
+
+```ts
+const postQuery = `query Post($id: ID!) { post(id: $id) { id title } }`
+
+specify({ operationName: 'Post', document: postQuery, variables: { id: '1' }, response: { post: { id: '1', title: 'First post' } } })
+specify({ operationName: 'Post', document: postQuery, variables: { id: '2' }, response: { post: { id: '2', title: 'Second post' } } })
 ```
 
 Call `reset()` between tests to clear all specifications and registered endpoints:
@@ -185,17 +240,21 @@ beforeEach(() => reset())
 
 whurl can intercept any HTTP endpoint, not just GraphQL. This is useful for mocking OAuth providers, REST APIs, or any other HTTP dependency your components talk to during tests.
 
-Register a plain endpoint with `register()`, then declare specifications using the three-argument form — operation name, HTTP method, and response data:
+Register a plain endpoint with `register()`, then declare specifications giving an operation name, HTTP method, and response — REST has no document to match against, so this form has no `document`/`variables` fields:
 
 ```ts
 import { register, specify } from '@nicholasf/whurl'
 
 register('http://auth.example.com/oauth/token')
 
-specify('ExchangeToken', 'POST', {
-  access_token: 'sith-token-abc123',
-  token_type: 'Bearer',
-  expires_in: 3600,
+specify({
+  operationName: 'ExchangeToken',
+  method: 'POST',
+  response: {
+    access_token: 'sith-token-abc123',
+    token_type: 'Bearer',
+    expires_in: 3600,
+  },
 })
 ```
 
@@ -213,7 +272,7 @@ beforeEach(() => reset())
 
 it('fetches the current exchange rate', async () => {
   register('https://api.exchangerate.example.com/latest')
-  specify('GetRate', 'GET', { base: 'USD', rates: { EUR: 0.92 } })
+  specify({ operationName: 'GetRate', method: 'GET', response: { base: 'USD', rates: { EUR: 0.92 } } })
 
   const rate = await getExchangeRate('EUR')
 
