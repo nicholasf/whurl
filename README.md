@@ -51,6 +51,12 @@ specify({
   response: { region: { id: 1, name: 'The Shattered Wastes', climate: 'Arid' } },
 })
 
+// specify() also takes an array, registering several specifications at once
+specify([
+  { operationName: 'Region', document: `query Region($id: ID!) { region(id: $id) { id name climate } }`, variables: { id: 1 }, response: { region: { id: 1, name: 'The Shattered Wastes', climate: 'Arid' } } },
+  { operationName: 'Region', document: `query Region($id: ID!) { region(id: $id) { id name climate } }`, variables: { id: 2 }, response: { region: { id: 2, name: 'Verdant Hollow', climate: 'Temperate' } } },
+])
+
 // REST, success, status defaults to 200
 specify({ operationName: 'ExchangeToken', method: 'POST', response: { access_token: 'sith-token-abc123', token_type: 'Bearer', expires_in: 3600 } })
 
