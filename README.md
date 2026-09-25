@@ -43,6 +43,14 @@ specify({
   response: { accounts: [{ id: 1, name: 'Kestrel', username: 'kestrel_runs' }] },
 }).repeat(3)
 
+// Matched by variables, not just document
+specify({
+  operationName: 'Region',
+  document: `query Region($id: ID!) { region(id: $id) { id name climate } }`,
+  variables: { id: 1 },
+  response: { region: { id: 1, name: 'The Shattered Wastes', climate: 'Arid' } },
+})
+
 // REST, success, status defaults to 200
 specify({ operationName: 'ExchangeToken', method: 'POST', response: { access_token: 'sith-token-abc123', token_type: 'Bearer', expires_in: 3600 } })
 
@@ -225,6 +233,15 @@ const postQuery = `query Post($id: ID!) { post(id: $id) { id title } }`
 
 specify({ operationName: 'Post', document: postQuery, variables: { id: '1' }, response: { post: { id: '1', title: 'First post' } } })
 specify({ operationName: 'Post', document: postQuery, variables: { id: '2' }, response: { post: { id: '2', title: 'Second post' } } })
+```
+
+`specify()` also takes an array, registering each entry independently — this is shorthand for calling `specify()` once per entry, not a distinct matching behaviour:
+
+```ts
+specify([
+  { operationName: 'Post', document: postQuery, variables: { id: '1' }, response: { post: { id: '1', title: 'First post' } } },
+  { operationName: 'Post', document: postQuery, variables: { id: '2' }, response: { post: { id: '2', title: 'Second post' } } },
+])
 ```
 
 Call `reset()` between tests to clear all specifications and registered endpoints:

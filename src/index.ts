@@ -325,7 +325,7 @@ const checkOperationNameMatchesDocument = (operationName: string, document: stri
 // explicit status hands the response over as-is, unwrapped and unvalidated,
 // since it can describe any shape: an errors array, a REST error body, or a
 // deliberately malformed string.
-export const specify: SpecifyFn = (options: SpecifyOptions): SpecificationHandle => {
+const specifyOne = (options: SpecifyOptions): SpecificationHandle => {
   if (isGraphQLOptions(options)) {
     const endpoint = findGraphQLEndpoint()
     const operationType = checkOperationNameMatchesDocument(options.operationName, options.document)
@@ -371,6 +371,17 @@ export const specify: SpecifyFn = (options: SpecifyOptions): SpecificationHandle
   endpoint.specifications.set(options.method.toUpperCase(), specification)
   return { repeat: (n: number) => { specification.remaining = n } }
 }
+
+// An array registers each entry independently via specifyOne — shorthand
+// for calling specify() once per entry, not a distinct matching behaviour.
+const specifyOneOrMany = (options: SpecifyOptions | SpecifyOptions[]): SpecificationHandle | SpecificationHandle[] => {
+  if (Array.isArray(options)) {
+    return options.map(specifyOne)
+  }
+  return specifyOne(options)
+}
+
+export const specify = specifyOneOrMany as SpecifyFn
 
 export const specifyNetworkError: SpecifyNetworkErrorFn = (options: SpecifyNetworkErrorOptions): SpecificationHandle => {
   const endpoint = findGraphQLEndpoint()

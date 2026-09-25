@@ -108,7 +108,16 @@ export type RestSpecifyOptions = {
 
 export type SpecifyOptions = GraphQLSpecifyOptions | RestSpecifyOptions
 
-export type SpecifyFn = (options: SpecifyOptions) => SpecificationHandle
+/**
+ * Declares one specification, or several at once. Given an array, each
+ * entry is a complete specify() options object, registered independently —
+ * this is shorthand for calling specify() once per entry, not a distinct
+ * matching behaviour.
+ */
+export type SpecifyFn = {
+  (options: SpecifyOptions): SpecificationHandle
+  (options: SpecifyOptions[]): SpecificationHandle[]
+}
 
 /**
  * Declares that a call never reaches the server at all — the request fails
