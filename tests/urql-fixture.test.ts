@@ -35,7 +35,12 @@ beforeEach(() => {
 
 describe('urql against a real GraphQL client pipeline', () => {
   it('intercepts an urql query and returns the specified mock data', async () => {
-    specify('Country', { country: { code: 'BR', name: 'Testlandia' } })
+    specify({
+      operationName: 'Country',
+      document: COUNTRY_QUERY,
+      variables: { code: 'BR' },
+      response: { country: { code: 'BR', name: 'Testlandia' } },
+    })
 
     const client = new Client({ url: endpoint, exchanges: [fetchExchange] })
     const result = await client.query(COUNTRY_QUERY, { code: 'BR' }).toPromise()
