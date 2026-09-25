@@ -301,6 +301,29 @@ describe('GraphQL specifications', () => {
       expect(first.data.me.id).toBe('1')
       expect(second.data.me.id).toBe('2')
     })
+
+    it('registers each entry of an array independently, matched by its own variables', async () => {
+      const postDocument = `query Post($id: ID!) { post(id: $id) { id title body author { id name email } } }`
+
+      const handles = specify([
+        { operationName: 'Post', document: postDocument, variables: { id: '1' }, response: { post: { id: '1', title: 'First post', body: 'Hello', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } } },
+        { operationName: 'Post', document: postDocument, variables: { id: '2' }, response: { post: { id: '2', title: 'Second post', body: 'Hi', author: { id: '1', name: 'Darth Vader', email: 'darth.vader@example.com' } } } },
+      ])
+
+      expect(handles).toHaveLength(2)
+
+      const fetchPost = (id: string) => fetch(graphqlURL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: postDocument, variables: { id } }),
+      })
+
+      const first = await (await fetchPost('1')).json()
+      const second = await (await fetchPost('2')).json()
+
+      expect(first.data.post.title).toBe('First post')
+      expect(second.data.post.title).toBe('Second post')
+    })
   })
 })
 
