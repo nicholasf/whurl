@@ -2,7 +2,20 @@
 import { buildSchema, getNamedType, isObjectType, type GraphQLSchema } from 'graphql'
 import { createMSWInterceptor } from './interceptors/msw.js'
 import { createHurlReporter, formatHurlRequest } from './reporters/hurl.js'
-import type { Endpoint, EndpointURL, RegisterFn, RegisterWithSchemaFn, Reporter, SpecificationHandle, SpecifyFn, SpecifyData } from './types.js'
+import type {
+  Endpoint,
+  EndpointURL,
+  RegisterFn,
+  RegisterWithSchemaFn,
+  Reporter,
+  Resolution,
+  Specification,
+  SpecificationHandle,
+  SpecifyBody,
+  SpecifyData,
+  SpecifyFn,
+  SpecifyNetworkErrorFn,
+} from './types.js'
 
 const registry = new Map<EndpointURL, Endpoint>()
 
@@ -32,19 +45,24 @@ const parseGraphQLQuery = async (request: Request): Promise<string> => {
   }
 }
 
-const resolveRequest = async (request: Request): Promise<SpecifyData | null> => {
+const resolveSpecification = (specification: Specification): Resolution =>
+  specification.kind === 'networkError'
+    ? { kind: 'networkError' }
+    : { kind: 'response', status: specification.status, body: specification.body }
+
+const resolveRequest = async (request: Request): Promise<Resolution> => {
   const endpoint = registry.get(normalizeURL(request.url))
-  if (!endpoint) return null
+  if (!endpoint) return { kind: 'passthrough' }
 
   if (endpoint.schema) {
     const query = await parseGraphQLQuery(request)
     const match = query.match(/(?:query|mutation|subscription)\s+(\w+)/)
     const operationName = match?.[1]
 
-    if (!operationName) return null
+    if (!operationName) return { kind: 'passthrough' }
 
     const specification = endpoint.specifications.get(operationName)
-    if (!specification || specification.remaining <= 0) return null
+    if (!specification || specification.remaining <= 0) return { kind: 'passthrough' }
 
     specification.remaining -= 1
 
@@ -58,12 +76,12 @@ const resolveRequest = async (request: Request): Promise<SpecifyData | null> => 
       console.log(formatHurlRequest(graphqlContext))
     }
 
-    return specification.data
+    return resolveSpecification(specification)
   }
 
   const method = request.method.toUpperCase()
   const specification = endpoint.specifications.get(method)
-  if (!specification || specification.remaining <= 0) return null
+  if (!specification || specification.remaining <= 0) return { kind: 'passthrough' }
 
   specification.remaining -= 1
 
@@ -77,7 +95,7 @@ const resolveRequest = async (request: Request): Promise<SpecifyData | null> => 
     console.log(formatHurlRequest(restContext))
   }
 
-  return specification.data
+  return resolveSpecification(specification)
 }
 
 const interceptor = createMSWInterceptor(resolveRequest)
@@ -176,41 +194,55 @@ export const registerWithSchema: RegisterWithSchemaFn = (url: EndpointURL, schem
   registry.set(key, { url, schema, specifications: new Map() })
 }
 
-export const specify: SpecifyFn = (
-  operationName: string,
-  dataOrMethodOrUrl: SpecifyData | string,
-  methodOrData?: SpecifyData | string,
-  _data?: SpecifyData
-): SpecificationHandle => {
-  if (typeof dataOrMethodOrUrl !== 'string') {
-    const specData = dataOrMethodOrUrl
+// A plain (no leading status) call wraps its body in a { data } envelope and
+// is validated against the schema, matching a plain successful response. A
+// leading status hands the body over as-is, unwrapped and unvalidated, since
+// it can describe any shape, an errors array, a REST error body, or a
+// deliberately malformed string.
+//
+// Dispatch is by argument count, not by the type of the second argument.
+// That worked before a body could only ever be an object (never a string),
+// so "is the second argument a string" doubled as "is this the REST form."
+// A malformed-body GraphQL call now puts a string in that same slot, so
+// count is the only thing left that reliably tells the forms apart.
+export const specify: SpecifyFn = (...args: unknown[]): SpecificationHandle => {
+  const status = typeof args[0] === 'number' ? (args.shift() as number) : undefined
+
+  const toResponse = (body: SpecifyBody): { status: number; body: unknown } =>
+    status === undefined ? { status: 200, body: { data: body } } : { status, body }
+
+  if (args.length === 2) {
+    const [operationName, specBody] = args as [string, SpecifyBody]
     const endpoint = findGraphQLEndpoint()
 
-    if (endpoint.schema) {
-      validateSpecificationData(operationName, specData, endpoint.schema)
+    if (status === undefined && endpoint.schema) {
+      validateSpecificationData(operationName, specBody as SpecifyData, endpoint.schema)
     }
 
-    const specification = { operationName, data: specData, remaining: 1 }
+    const specification: Specification = { kind: 'response', operationName, ...toResponse(specBody), remaining: 1 }
     endpoint.specifications.set(operationName, specification)
-
     return { repeat: (n: number) => { specification.remaining = n } }
   }
 
-  if (typeof methodOrData === 'string') {
-    const url = dataOrMethodOrUrl
-    const method = methodOrData.toUpperCase()
-    const specData = _data!
-    const endpoint = registry.get(normalizeURL(url))
-    if (!endpoint) throw new Error(`No endpoint registered for URL: ${url}`)
-    const specification = { operationName, method, data: specData, remaining: 1 }
-    endpoint.specifications.set(method, specification)
+  if (args.length === 3) {
+    const [operationName, method, specBody] = args as [string, string, SpecifyBody]
+    const endpoint = findRestEndpoint()
+    const specification: Specification = { kind: 'response', operationName, method: method.toUpperCase(), ...toResponse(specBody), remaining: 1 }
+    endpoint.specifications.set(method.toUpperCase(), specification)
     return { repeat: (n: number) => { specification.remaining = n } }
   }
 
-  const method = dataOrMethodOrUrl.toUpperCase()
-  const specData = methodOrData!
-  const endpoint = findRestEndpoint()
-  const specification = { operationName, method, data: specData, remaining: 1 }
-  endpoint.specifications.set(method, specification)
+  const [operationName, url, method, specBody] = args as [string, string, string, SpecifyBody]
+  const endpoint = registry.get(normalizeURL(url))
+  if (!endpoint) throw new Error(`No endpoint registered for URL: ${url}`)
+  const specification: Specification = { kind: 'response', operationName, method: method.toUpperCase(), ...toResponse(specBody), remaining: 1 }
+  endpoint.specifications.set(method.toUpperCase(), specification)
+  return { repeat: (n: number) => { specification.remaining = n } }
+}
+
+export const specifyNetworkError: SpecifyNetworkErrorFn = (operationName: string): SpecificationHandle => {
+  const endpoint = findGraphQLEndpoint()
+  const specification: Specification = { kind: 'networkError', operationName, remaining: 1 }
+  endpoint.specifications.set(operationName, specification)
   return { repeat: (n: number) => { specification.remaining = n } }
 }

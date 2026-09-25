@@ -1,5 +1,33 @@
 # whurl
 
+whurl mocks a GraphQL endpoint straight from its schema, validating every request and response against it, and mocks anything else, REST, OAuth, webhooks, the same way. Every specification can also be exported as a Hurl file and replayed against the real backend, so a test's mock logic becomes a repeatable contract check.
+
+```ts
+registerWithSchema('http://localhost:4000/graphql', schema)
+register('http://auth.example.com/oauth/token')
+
+// Success, status defaults to 200
+specify('World', { world: { id: 1, name: 'Aerthos', description: 'A shattered realm', isActive: true } })
+
+// GraphQL error, still a 200 by convention, made explicit here
+specify(200, 'World', { errors: [{ message: 'forbidden', extensions: { code: 'UNAUTHORISED' } }] })
+
+// A non-200 GraphQL response, e.g. behind a gateway that rejects before resolving
+specify(500, 'World', { errors: [{ message: 'internal server error' }] })
+
+// Repeat a specification across multiple matches
+specify('Accounts', { accounts: [{ id: 1, name: 'Kestrel', username: 'kestrel_runs' }] }).repeat(3)
+
+// REST, success, status defaults to 200
+specify('ExchangeToken', 'POST', { access_token: 'sith-token-abc123', token_type: 'Bearer', expires_in: 3600 })
+
+// REST, failure, explicit status
+specify(401, 'ExchangeToken', 'POST', { error: 'invalid_grant', error_description: 'Refresh token expired' })
+
+// The call never reaches the server at all, TypeError: Failed to fetch
+specifyNetworkError('World')
+```
+
 **whurl** intercepts HTTP calls in tests at the network layer — no `vi.mock()` calls, your real client code runs. For GraphQL endpoints it validates queries and data shapes against your schema using [graphql-js](https://github.com/graphql/graphql-js), the GraphQL Foundation's reference implementation. For any other endpoint — REST APIs, OAuth providers, external services — it works as a thin wrapper over MSW. Either way, every intercepted call can be recorded as a Hurl file and replayed against a real backend later.
 
 If you've wanted a GraphQL schema to act as a contract between frontend and backend — the way a Swagger file does for REST — whurl is built for that, although it solves the problem differently.
